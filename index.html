@@ -1,0 +1,733 @@
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  Flame, Package, CalendarDays, TrendingUp, Wallet, Bell, Settings as SettingsIcon,
+  Plus, Check, Moon, Sun, Award, ChevronRight, X, ShoppingCart, Zap, Droplet,
+  ChevronDown, Truck, AlertTriangle
+} from "lucide-react";
+import {
+  ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip,
+  LineChart, Line, XAxis, YAxis, CartesianGrid
+} from "recharts";
+
+/* ---------- Fonts ---------- */
+function useFonts() {
+  useEffect(() => {
+    const id = "stp-fonts";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap";
+    document.head.appendChild(link);
+  }, []);
+}
+
+/* ---------- Theme tokens ---------- */
+const darkTheme = {
+  ink: "#15130F",
+  panel: "#201B15",
+  panel2: "#2A241C",
+  line: "#3A3227",
+  cream: "#F2EAD9",
+  muted: "#AFA189",
+  amber: "#E8A33D",
+  cocoa: "#C99361",
+  cyan: "#6FE7DD",
+  danger: "#E1483A",
+  good: "#8FCB6B",
+};
+const lightTheme = {
+  ink: "#F4EFE4",
+  panel: "#FFFFFF",
+  panel2: "#EFE7D6",
+  line: "#DCD2BC",
+  cream: "#1F1B16",
+  muted: "#7A6E58",
+  amber: "#C67F1C",
+  cocoa: "#8B5E3C",
+  cyan: "#0E9E92",
+  danger: "#C43626",
+  good: "#4E8B34",
+};
+
+/* ---------- Helpers ---------- */
+const dayMs = 86400000;
+const fmt = (d) =>
+  new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / dayMs);
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const addDays = (d, n) => new Date(new Date(d).getTime() + n * dayMs).toISOString().slice(0, 10);
+
+const TYPE_META = {
+  creatine: { label: "Creatine", key: "amber", icon: Zap },
+  whey: { label: "Whey Protein", key: "cocoa", icon: Droplet },
+  preworkout: { label: "Pre Workout", key: "cyan", icon: Flame },
+  custom: { label: "Custom", key: "amber", icon: Package },
+};
+
+const QUOTES = [
+  "One scoop today is one step closer to your goal.",
+  "Consistency builds muscle.",
+  "Never skip the basics.",
+  "Progress happens daily.",
+  "Fuel your future self.",
+  "Muscles are built by habits.",
+  "Discipline beats motivation.",
+];
+
+/* ---------- Initial data ---------- */
+const initialSupplements = [
+  {
+    id: "creatine",
+    type: "creatine",
+    name: "Creatine Monohydrate",
+    brand: "MuscleBlaze",
+    flavor: "Unflavored",
+    weightGrams: 300,
+    gramsPerScoop: 5,
+    scoopsPerDay: 1,
+    workoutOnly: false,
+    openedDate: addDays(todayISO(), -22),
+    price: 799,
+    store: "Amazon",
+    streak: 14,
+    lastLogged: addDays(todayISO(), -1),
+  },
+  {
+    id: "whey",
+    type: "whey",
+    name: "Gold Standard Whey",
+    brand: "Optimum Nutrition",
+    flavor: "Double Rich Chocolate",
+    weightGrams: 1000,
+    gramsPerScoop: 32,
+    scoopsPerDay: 2,
+    workoutOnly: false,
+    openedDate: addDays(todayISO(), -30),
+    price: 2999,
+    store: "HealthKart",
+    streak: 6,
+    lastLogged: addDays(todayISO(), -2),
+  },
+  {
+    id: "preworkout",
+    type: "preworkout",
+    name: "C4 Original",
+    brand: "Cellucor",
+    flavor: "Fruit Punch",
+    weightGrams: 250,
+    gramsPerScoop: 6,
+    scoopsPerDay: 1,
+    workoutOnly: true,
+    workoutDaysPerWeek: 4,
+    openedDate: addDays(todayISO(), -9),
+    price: 1599,
+    store: "Amazon",
+    streak: 3,
+    lastLogged: addDays(todayISO(), -1),
+  },
+];
+
+const initialOrders = [
+  { id: 1, supplementId: "creatine", buyingDate: addDays(todayISO(), -80), deliveryDate: addDays(todayISO(), -77), price: 749, store: "Amazon" },
+  { id: 2, supplementId: "creatine", buyingDate: addDays(todayISO(), -50), deliveryDate: addDays(todayISO(), -47), price: 769, store: "Amazon" },
+  { id: 3, supplementId: "creatine", buyingDate: addDays(todayISO(), -22), deliveryDate: addDays(todayISO(), -20), price: 799, store: "Amazon" },
+  { id: 4, supplementId: "whey", buyingDate: addDays(todayISO(), -95), deliveryDate: addDays(todayISO(), -90), price: 2899, store: "HealthKart" },
+  { id: 5, supplementId: "whey", buyingDate: addDays(todayISO(), -30), deliveryDate: addDays(todayISO(), -27), price: 2999, store: "HealthKart" },
+  { id: 6, supplementId: "preworkout", buyingDate: addDays(todayISO(), -40), deliveryDate: addDays(todayISO(), -37), price: 1499, store: "Amazon" },
+  { id: 7, supplementId: "preworkout", buyingDate: addDays(todayISO(), -9), deliveryDate: addDays(todayISO(), -7), price: 1599, store: "Amazon" },
+];
+
+/* ---------- Derived calc ---------- */
+function deriveSupplement(s, orders) {
+  const dailyGrams = s.workoutOnly
+    ? (s.gramsPerScoop * s.scoopsPerDay * (s.workoutDaysPerWeek || 4)) / 7
+    : s.gramsPerScoop * s.scoopsPerDay;
+  const elapsed = Math.max(0, daysBetween(s.openedDate, todayISO()));
+  const consumed = Math.min(s.weightGrams, elapsed * dailyGrams);
+  const remainingGrams = Math.max(0, s.weightGrams - consumed);
+  const daysLeft = dailyGrams > 0 ? Math.round(remainingGrams / dailyGrams) : 999;
+  const finishDate = addDays(todayISO(), daysLeft);
+
+  const myOrders = orders.filter((o) => o.supplementId === s.id);
+  const deliveryDays = myOrders.length
+    ? myOrders.reduce((sum, o) => sum + daysBetween(o.buyingDate, o.deliveryDate), 0) / myOrders.length
+    : 3;
+  const safetyBuffer = 5;
+  const reorderDate = addDays(finishDate, -Math.round(deliveryDays + safetyBuffer));
+  const percentLeft = Math.round((remainingGrams / s.weightGrams) * 100);
+  const costPerDay = (s.price / s.weightGrams) * dailyGrams;
+  const monthlyCost = costPerDay * 30;
+  const avgPrice = myOrders.length
+    ? myOrders.reduce((a, o) => a + o.price, 0) / myOrders.length
+    : s.price;
+
+  return {
+    dailyGrams, remainingGrams, daysLeft, finishDate, deliveryDays,
+    reorderDate, percentLeft, costPerDay, monthlyCost, avgPrice, myOrders,
+  };
+}
+
+/* ---------- Scoop gauge (signature progress ring) ---------- */
+function ScoopGauge({ percent, color, size = 92, label, sub, theme }) {
+  const r = size / 2 - 10;
+  const c = 2 * Math.PI * r;
+  const offset = c - (Math.min(100, Math.max(0, percent)) / 100) * c;
+  const ticks = Array.from({ length: 12 });
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        {ticks.map((_, i) => {
+          const a = (i / 12) * 2 * Math.PI;
+          const x1 = size / 2 + (r + 6) * Math.cos(a);
+          const y1 = size / 2 + (r + 6) * Math.sin(a);
+          const x2 = size / 2 + (r + 9) * Math.cos(a);
+          const y2 = size / 2 + (r + 9) * Math.sin(a);
+          return (
+            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke={theme.line} strokeWidth="2" transform="rotate(90)" style={{ transformOrigin: "center" }} />
+          );
+        })}
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={theme.line} strokeWidth="8" />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="8"
+          strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
+          style={{ transition: "stroke-dashoffset 0.6s ease" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: theme.cream }} className="text-lg font-semibold leading-none">
+          {label}
+        </span>
+        <span style={{ color: theme.muted }} className="text-[10px] mt-1 uppercase tracking-wide">{sub}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Small UI atoms ---------- */
+function Card({ theme, children, className = "", style = {} }) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${className}`}
+      style={{ background: theme.panel, borderColor: theme.line, ...style }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Pill({ active, onClick, children, theme }) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3.5 py-1.5 rounded-full text-xs font-medium tracking-wide transition-colors whitespace-nowrap"
+      style={{
+        fontFamily: "'IBM Plex Sans', sans-serif",
+        background: active ? theme.cream : "transparent",
+        color: active ? theme.ink : theme.muted,
+        border: `1px solid ${active ? theme.cream : theme.line}`,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function StatCard({ theme, icon: Icon, label, value, sub, accent }) {
+  return (
+    <Card theme={theme} className="flex flex-col gap-2 min-w-0">
+      <div className="flex items-center justify-between">
+        <span style={{ color: theme.muted }} className="text-[11px] uppercase tracking-widest">{label}</span>
+        <Icon size={15} style={{ color: accent || theme.muted }} />
+      </div>
+      <span style={{ fontFamily: "'Oswald', sans-serif", color: theme.cream }} className="text-2xl font-semibold truncate">
+        {value}
+      </span>
+      {sub && <span style={{ color: theme.muted }} className="text-xs">{sub}</span>}
+    </Card>
+  );
+}
+
+/* ---------- Canister card ---------- */
+function CanisterCard({ s, theme, currency, orders, onOpen, onLog }) {
+  const meta = TYPE_META[s.type];
+  const accent = theme[meta.key];
+  const d = deriveSupplement(s, orders);
+  const loggedToday = s.lastLogged === todayISO();
+  const low = d.daysLeft <= 7;
+
+  return (
+    <Card theme={theme} className="flex flex-col gap-3 cursor-pointer hover:translate-y-[-2px] transition-transform" style={{}}>
+      <div onClick={() => onOpen(s.id)} className="flex items-center gap-3">
+        <div className="h-2 flex-1 rounded-full" style={{ background: accent }} />
+      </div>
+      <div onClick={() => onOpen(s.id)} className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <meta.icon size={14} style={{ color: accent }} />
+            <span style={{ color: theme.muted }} className="text-[11px] uppercase tracking-widest">{meta.label}</span>
+          </div>
+          <h3 style={{ fontFamily: "'Oswald', sans-serif", color: theme.cream }} className="text-lg font-semibold leading-tight mt-0.5 truncate">
+            {s.name}
+          </h3>
+          <p style={{ color: theme.muted }} className="text-xs mt-0.5">{s.brand} · {s.flavor}</p>
+
+          <div className="mt-3 flex items-center gap-2">
+            {low ? (
+              <span className="flex items-center gap-1 text-xs font-medium" style={{ color: theme.danger }}>
+                <AlertTriangle size={12} /> {d.daysLeft}d left · reorder now
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs" style={{ color: theme.good }}>
+                <Check size={12} /> Stocked · finishes {fmt(d.finishDate)}
+              </span>
+            )}
+          </div>
+        </div>
+        <ScoopGauge percent={d.percentLeft} color={accent} label={`${d.percentLeft}%`} sub="left" theme={theme} />
+      </div>
+
+      <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: theme.line }}>
+        <span className="flex items-center gap-1 text-xs" style={{ color: theme.muted }}>
+          <Flame size={13} style={{ color: theme.amber }} /> {s.streak}d streak
+        </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onLog(s.id); }}
+          disabled={loggedToday}
+          className="text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors"
+          style={{
+            background: loggedToday ? "transparent" : accent,
+            color: loggedToday ? theme.muted : theme.ink,
+            border: `1px solid ${loggedToday ? theme.line : accent}`,
+          }}
+        >
+          <Check size={12} /> {loggedToday ? "Logged" : "Log dose"}
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+/* ---------- Supplement detail panel ---------- */
+function SupplementDetail({ s, setSupplement, theme, currency, orders, onClose }) {
+  const meta = TYPE_META[s.type];
+  const accent = theme[meta.key];
+  const d = deriveSupplement(s, orders);
+
+  const field = (key, label, type = "number") => (
+    <label className="flex flex-col gap-1">
+      <span style={{ color: theme.muted }} className="text-[11px] uppercase tracking-wide">{label}</span>
+      <input
+        type={type}
+        value={s[key] ?? ""}
+        onChange={(e) => setSupplement(s.id, { [key]: type === "number" ? Number(e.target.value) : e.target.value })}
+        className="rounded-lg px-3 py-2 text-sm outline-none"
+        style={{ background: theme.panel2, color: theme.cream, border: `1px solid ${theme.line}` }}
+      />
+    </label>
+  );
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5"
+        style={{ background: theme.panel, border: `1px solid ${theme.line}` }}
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <span style={{ color: accent }} className="text-[11px] uppercase tracking-widest font-medium">{meta.label}</span>
+            <h2 style={{ fontFamily: "'Oswald', sans-serif", color: theme.cream }} className="text-2xl font-semibold">{s.name}</h2>
+          </div>
+          <button onClick={onClose} style={{ color: theme.muted }}><X size={20} /></button>
+        </div>
+
+        <div className="flex items-center gap-4 mt-4">
+          <ScoopGauge percent={d.percentLeft} color={accent} label={`${d.percentLeft}%`} sub="remaining" theme={theme} size={100} />
+          <div className="flex flex-col gap-1 text-sm" style={{ color: theme.cream }}>
+            <span>Finishes <b style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(d.finishDate)}</b></span>
+            <span>Reorder by <b style={{ fontFamily: "'IBM Plex Mono', monospace", color: theme.danger }}>{fmt(d.reorderDate)}</b></span>
+            <span style={{ color: theme.muted }} className="text-xs">Avg delivery {d.deliveryDays.toFixed(1)}d + 5d buffer</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mt-5">
+          {field("brand", "Brand", "text")}
+          {field("flavor", "Flavor", "text")}
+          {field("weightGrams", "Weight (g)")}
+          {field("gramsPerScoop", "Grams / scoop")}
+          {field("scoopsPerDay", "Scoops / day")}
+          {field("price", "Price")}
+          {field("openedDate", "Opened date", "date")}
+          {field("store", "Store", "text")}
+        </div>
+
+        <div className="mt-5 pt-4 border-t" style={{ borderColor: theme.line }}>
+          <h4 style={{ color: theme.cream }} className="text-sm font-medium mb-2">Order history</h4>
+          <div className="flex flex-col gap-1.5">
+            {d.myOrders.map((o) => (
+              <div key={o.id} className="flex items-center justify-between text-xs" style={{ color: theme.muted }}>
+                <span>{fmt(o.buyingDate)} → {fmt(o.deliveryDate)}</span>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: theme.cream }}>{currency}{o.price}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-xl p-3 flex items-start gap-2" style={{ background: theme.panel2 }}>
+          <TrendingUp size={15} style={{ color: accent }} className="mt-0.5 shrink-0" />
+          <p className="text-xs leading-relaxed" style={{ color: theme.muted }}>
+            Costs {currency}{d.costPerDay.toFixed(1)}/day (~{currency}{Math.round(d.monthlyCost)}/mo) at{" "}
+            {d.dailyGrams.toFixed(1)}g/day. Avg order price {currency}{Math.round(d.avgPrice)}.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Add supplement modal ---------- */
+function AddSupplementModal({ theme, onAdd, onClose }) {
+  const [form, setForm] = useState({
+    name: "", brand: "", flavor: "", weightGrams: 500, gramsPerScoop: 10,
+    scoopsPerDay: 1, price: 999, store: "Amazon", type: "custom", workoutOnly: false,
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5"
+        style={{ background: theme.panel, border: `1px solid ${theme.line}` }}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 style={{ fontFamily: "'Oswald', sans-serif", color: theme.cream }} className="text-xl font-semibold">Add supplement</h2>
+          <button onClick={onClose} style={{ color: theme.muted }}><X size={20} /></button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            ["name", "Name", "text", 2],
+            ["brand", "Brand", "text", 1],
+            ["flavor", "Flavor", "text", 1],
+            ["weightGrams", "Weight (g)", "number", 1],
+            ["gramsPerScoop", "Grams / scoop", "number", 1],
+            ["scoopsPerDay", "Scoops / day", "number", 1],
+            ["price", "Price", "number", 1],
+            ["store", "Store", "text", 1],
+          ].map(([k, label, type, span]) => (
+            <label key={k} className={`flex flex-col gap-1 ${span === 2 ? "col-span-2" : ""}`}>
+              <span style={{ color: theme.muted }} className="text-[11px] uppercase tracking-wide">{label}</span>
+              <input type={type} value={form[k]} onChange={(e) => set(k, type === "number" ? Number(e.target.value) : e.target.value)}
+                className="rounded-lg px-3 py-2 text-sm outline-none"
+                style={{ background: theme.panel2, color: theme.cream, border: `1px solid ${theme.line}` }} />
+            </label>
+          ))}
+        </div>
+        <button
+          onClick={() => { if (form.name) onAdd(form); }}
+          className="w-full mt-5 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
+          style={{ background: theme.amber, color: theme.ink }}
+        >
+          <Plus size={15} /> Add to inventory
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Main app ---------- */
+export default function SupplementTrackerPro() {
+  useFonts();
+  const [dark, setDark] = useState(true);
+  const theme = dark ? darkTheme : lightTheme;
+  const [tab, setTab] = useState("dashboard");
+  const [currency] = useState("₹");
+  const [supplements, setSupplements] = useState(initialSupplements);
+  const [orders] = useState(initialOrders);
+  const [openId, setOpenId] = useState(null);
+  const [adding, setAdding] = useState(false);
+
+  const setSupplement = (id, patch) =>
+    setSupplements((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+
+  const logDose = (id) =>
+    setSupplements((prev) =>
+      prev.map((s) => {
+        if (s.id !== id || s.lastLogged === todayISO()) return s;
+        const d = deriveSupplement(s, orders);
+        const consumedExtra = d.dailyGrams;
+        return {
+          ...s,
+          lastLogged: todayISO(),
+          streak: s.streak + 1,
+          openedDate: s.openedDate, // keep; consumption model uses elapsed*daily already
+          weightGrams: s.weightGrams, // unaffected, remaining is derived from elapsed days
+        };
+      })
+    );
+
+  const addSupplement = (form) => {
+    const id = `custom-${Date.now()}`;
+    setSupplements((prev) => [
+      ...prev,
+      { ...form, id, openedDate: todayISO(), streak: 0, lastLogged: null, workoutOnly: false },
+    ]);
+    setAdding(false);
+  };
+
+  const derived = useMemo(
+    () => supplements.map((s) => ({ s, d: deriveSupplement(s, orders) })),
+    [supplements, orders]
+  );
+
+  const totalMonthly = derived.reduce((a, { d }) => a + d.monthlyCost, 0);
+  const nextOrder = [...derived].sort((a, b) => new Date(a.d.reorderDate) - new Date(b.d.reorderDate))[0];
+  const lowStockCount = derived.filter(({ d }) => d.daysLeft <= 7).length;
+  const bestStreak = Math.max(...supplements.map((s) => s.streak));
+  const quote = QUOTES[new Date().getDate() % QUOTES.length];
+  const openSupplement = supplements.find((s) => s.id === openId);
+
+  const pieData = derived.map(({ s, d }) => ({
+    name: TYPE_META[s.type]?.label || s.name,
+    value: Math.round(d.monthlyCost),
+    color: theme[TYPE_META[s.type]?.key || "amber"],
+  }));
+
+  const priceTrend = useMemo(() => {
+    const dates = [...new Set(orders.map((o) => o.buyingDate))].sort();
+    return dates.map((date) => {
+      const row = { date: fmt(date).slice(0, 6) };
+      supplements.forEach((s) => {
+        const o = orders.find((o) => o.supplementId === s.id && o.buyingDate === date);
+        if (o) row[s.id] = o.price;
+      });
+      return row;
+    });
+  }, [orders, supplements]);
+
+  const tabs = [
+    { id: "dashboard", label: "Dashboard" },
+    { id: "supplements", label: "Supplements" },
+    { id: "orders", label: "Orders" },
+    { id: "expenses", label: "Expenses" },
+    { id: "settings", label: "Settings" },
+  ];
+
+  return (
+    <div style={{ background: theme.ink, minHeight: "100%", fontFamily: "'IBM Plex Sans', sans-serif" }} className="min-h-full w-full">
+      <div className="max-w-3xl mx-auto px-4 py-5 pb-14">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ background: theme.amber }}>
+              <Package size={18} style={{ color: theme.ink }} />
+            </div>
+            <div>
+              <h1 style={{ fontFamily: "'Oswald', sans-serif", color: theme.cream }} className="text-lg font-semibold leading-none tracking-tight">
+                SUPPLEMENT TRACKER <span style={{ color: theme.amber }}>PRO</span>
+              </h1>
+              <p style={{ color: theme.muted }} className="text-[11px] mt-0.5">Stay stocked. Stay consistent.</p>
+            </div>
+          </div>
+          <button onClick={() => setDark((v) => !v)} className="h-9 w-9 rounded-full flex items-center justify-center border" style={{ borderColor: theme.line, color: theme.cream }}>
+            {dark ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1">
+          {tabs.map((t) => (
+            <Pill key={t.id} active={tab === t.id} onClick={() => setTab(t.id)} theme={theme}>{t.label}</Pill>
+          ))}
+        </div>
+
+        {/* DASHBOARD */}
+        {tab === "dashboard" && (
+          <div className="flex flex-col gap-4">
+            <Card theme={theme} className="flex items-center gap-4" style={{ background: `linear-gradient(135deg, ${theme.panel}, ${theme.panel2})` }}>
+              <ScoopGauge percent={Math.min(100, bestStreak)} color={theme.amber} size={80} label={bestStreak} sub="day streak" theme={theme} />
+              <div>
+                <span className="flex items-center gap-1 text-xs font-medium" style={{ color: theme.amber }}><Award size={13} /> Motivation</span>
+                <p style={{ color: theme.cream, fontFamily: "'Oswald', sans-serif" }} className="text-base mt-1 leading-snug">{quote}</p>
+              </div>
+            </Card>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <StatCard theme={theme} icon={Package} label="Supplements" value={supplements.length} sub="tracked" accent={theme.amber} />
+              <StatCard theme={theme} icon={AlertTriangle} label="Low stock" value={lowStockCount} sub="need reorder" accent={lowStockCount ? theme.danger : theme.good} />
+              <StatCard theme={theme} icon={Truck} label="Next order" value={fmt(nextOrder.d.reorderDate)} sub={nextOrder.s.name} accent={theme.cyan} />
+              <StatCard theme={theme} icon={Wallet} label="Monthly cost" value={`${currency}${Math.round(totalMonthly)}`} sub="est. this month" accent={theme.cocoa} />
+              <StatCard theme={theme} icon={Flame} label="Best streak" value={`${bestStreak}d`} sub="keep it going" accent={theme.amber} />
+              <StatCard theme={theme} icon={Bell} label="Today" value={supplements.filter((s) => s.lastLogged !== todayISO()).length} sub="doses pending" accent={theme.danger} />
+            </div>
+
+            <div>
+              <h3 style={{ color: theme.cream, fontFamily: "'Oswald', sans-serif" }} className="text-sm font-medium mb-2 uppercase tracking-wide">Today's schedule</h3>
+              <div className="flex flex-col gap-2">
+                {supplements.map((s) => {
+                  const meta = TYPE_META[s.type];
+                  const accent = theme[meta.key];
+                  const done = s.lastLogged === todayISO();
+                  return (
+                    <Card key={s.id} theme={theme} className="flex items-center justify-between py-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <meta.icon size={15} style={{ color: accent }} />
+                        <span style={{ color: theme.cream }} className="text-sm truncate">{s.name}</span>
+                      </div>
+                      <button onClick={() => logDose(s.id)} disabled={done}
+                        className="text-xs px-3 py-1 rounded-full font-medium"
+                        style={{ background: done ? "transparent" : accent, color: done ? theme.good : theme.ink, border: `1px solid ${done ? theme.line : accent}` }}>
+                        {done ? "✓ Done" : "Mark taken"}
+                      </button>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SUPPLEMENTS */}
+        {tab === "supplements" && (
+          <div className="flex flex-col gap-4">
+            <button onClick={() => setAdding(true)}
+              className="self-start flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-full"
+              style={{ background: theme.panel2, color: theme.cream, border: `1px solid ${theme.line}` }}>
+              <Plus size={14} /> Add custom supplement
+            </button>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {supplements.map((s) => (
+                <CanisterCard key={s.id} s={s} theme={theme} currency={currency} orders={orders} onOpen={setOpenId} onLog={logDose} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ORDERS */}
+        {tab === "orders" && (
+          <div className="flex flex-col gap-4">
+            <Card theme={theme}>
+              <h3 style={{ color: theme.cream, fontFamily: "'Oswald', sans-serif" }} className="text-sm font-medium mb-3 uppercase tracking-wide">Price trend</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={priceTrend} margin={{ left: -20 }}>
+                  <CartesianGrid stroke={theme.line} strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: theme.muted, fontSize: 10 }} axisLine={{ stroke: theme.line }} tickLine={false} />
+                  <YAxis tick={{ fill: theme.muted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <RTooltip contentStyle={{ background: theme.panel2, border: `1px solid ${theme.line}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: theme.cream }} />
+                  {supplements.map((s) => (
+                    <Line key={s.id} type="monotone" dataKey={s.id} name={s.name} stroke={theme[TYPE_META[s.type]?.key || "amber"]} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </Card>
+
+            {supplements.map((s) => {
+              const d = deriveSupplement(s, orders);
+              const accent = theme[TYPE_META[s.type].key];
+              return (
+                <Card key={s.id} theme={theme}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-2 w-2 rounded-full" style={{ background: accent }} />
+                    <h4 style={{ color: theme.cream }} className="text-sm font-medium">{s.name}</h4>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {d.myOrders.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between text-xs" style={{ color: theme.muted }}>
+                        <span className="flex items-center gap-1"><ShoppingCart size={11} /> {fmt(o.buyingDate)} · {o.store}</span>
+                        <span className="flex items-center gap-3">
+                          <span>{daysBetween(o.buyingDate, o.deliveryDate)}d delivery</span>
+                          <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: theme.cream }}>{currency}{o.price}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* EXPENSES */}
+        {tab === "expenses" && (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard theme={theme} icon={Wallet} label="This month" value={`${currency}${Math.round(totalMonthly)}`} accent={theme.amber} />
+              <StatCard theme={theme} icon={TrendingUp} label="Yearly (est.)" value={`${currency}${Math.round(totalMonthly * 12)}`} accent={theme.cocoa} />
+            </div>
+            <Card theme={theme}>
+              <h3 style={{ color: theme.cream, fontFamily: "'Oswald', sans-serif" }} className="text-sm font-medium mb-2 uppercase tracking-wide">Spend by supplement</h3>
+              <div className="flex items-center">
+                <ResponsiveContainer width="60%" height={180}>
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={70} paddingAngle={3}>
+                      {pieData.map((p, i) => <Cell key={i} fill={p.color} stroke={theme.panel} strokeWidth={2} />)}
+                    </Pie>
+                    <RTooltip contentStyle={{ background: theme.panel2, border: `1px solid ${theme.line}`, borderRadius: 8, fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-col gap-2 flex-1">
+                  {pieData.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5" style={{ color: theme.cream }}>
+                        <span className="h-2 w-2 rounded-full" style={{ background: p.color }} /> {p.name}
+                      </span>
+                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: theme.muted }}>{currency}{p.value}/mo</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+            <Card theme={theme}>
+              <h3 style={{ color: theme.cream, fontFamily: "'Oswald', sans-serif" }} className="text-sm font-medium mb-2 uppercase tracking-wide">Cost per scoop</h3>
+              <div className="flex flex-col gap-2">
+                {derived.map(({ s, d }) => (
+                  <div key={s.id} className="flex items-center justify-between text-xs">
+                    <span style={{ color: theme.cream }}>{s.name}</span>
+                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: theme.muted }}>
+                      {currency}{((s.price / s.weightGrams) * s.gramsPerScoop).toFixed(1)} / scoop
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* SETTINGS */}
+        {tab === "settings" && (
+          <div className="flex flex-col gap-3">
+            <Card theme={theme} className="flex items-center justify-between">
+              <div>
+                <p style={{ color: theme.cream }} className="text-sm font-medium">Appearance</p>
+                <p style={{ color: theme.muted }} className="text-xs">Switch between dark and light mode</p>
+              </div>
+              <button onClick={() => setDark((v) => !v)} className="h-9 w-16 rounded-full relative" style={{ background: theme.panel2, border: `1px solid ${theme.line}` }}>
+                <span className="absolute top-1 h-6 w-6 rounded-full transition-all flex items-center justify-center" style={{ background: theme.amber, left: dark ? 4 : 32 }}>
+                  {dark ? <Moon size={12} style={{ color: theme.ink }} /> : <Sun size={12} style={{ color: theme.ink }} />}
+                </span>
+              </button>
+            </Card>
+            <Card theme={theme}>
+              <p style={{ color: theme.cream }} className="text-sm font-medium mb-1">Currency</p>
+              <p style={{ color: theme.muted }} className="text-xs">₹ Indian Rupee (default)</p>
+            </Card>
+            <Card theme={theme}>
+              <p style={{ color: theme.cream }} className="text-sm font-medium mb-1">Reorder safety buffer</p>
+              <p style={{ color: theme.muted }} className="text-xs">5 days added to average delivery time before recommending reorder date.</p>
+            </Card>
+            <Card theme={theme}>
+              <p style={{ color: theme.cream }} className="text-sm font-medium mb-1">About this prototype</p>
+              <p style={{ color: theme.muted }} className="text-xs leading-relaxed">
+                Frontend-only demo running on in-memory sample data. Connect a backend (auth, database, push notifications, cloud sync) to make it persistent and multi-device.
+              </p>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {openSupplement && (
+        <SupplementDetail s={openSupplement} setSupplement={setSupplement} theme={theme} currency={currency} orders={orders} onClose={() => setOpenId(null)} />
+      )}
+      {adding && <AddSupplementModal theme={theme} onAdd={addSupplement} onClose={() => setAdding(false)} />}
+    </div>
+  );
+}
