@@ -61,6 +61,7 @@ nav button span{font-size:20px;transition:transform .2s}nav button.on{color:var(
 .note{font-size:11px;color:var(--tx3);text-align:center;margin-top:10px}
 .tap{cursor:pointer;-webkit-tap-highlight-color:transparent}.tap:active{transform:scale(.98);opacity:.9}
 #pop{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}#pop>div{background:var(--card);color:var(--tx,inherit);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:18px 18px 26px;animation:up .25s ease both}
+#testov .card,#testov .btn,.noanim .card{animation:none!important;transition:none!important}
 </style>
 </head>
 <body>
@@ -208,7 +209,7 @@ function vAtt(){
   return '<div class="card"><div class="msel"><button onclick="calGo(-1)">‹</button><b>'+names[calM]+' '+calY+'</b><button onclick="calGo(1)">›</button></div><div class="cal">'+h+'</div>'
    +'<div class="legend"><span>🟩 Present '+c.P+'</span><span>🟥 Absent '+c.A+'</span><span>🟨 Late '+c.L+'</span><span>🟦 Holiday</span></div></div>';
 }
-function calGo(n){calM+=n;if(calM<0){calM=11;calY--}if(calM>11){calM=0;calY++}$('main').innerHTML=vAtt()}
+function calGo(n){$('main').classList.add('noanim');calM+=n;if(calM<0){calM=11;calY--}if(calM>11){calM=0;calY++}$('main').innerHTML=vAtt()}
 function vFees(){
   var f=ME.fees||[],due=f.reduce(function(t,x){return t+(x.balance||0)},0);
   return '<div class="card"><div class="lab">Total pending</div><div class="big" style="color:'+(due?'var(--bad)':'var(--ok)')+'">₹'+due.toLocaleString('en-IN')+'</div></div><div class="card"><div class="ct">Fee history</div>'
