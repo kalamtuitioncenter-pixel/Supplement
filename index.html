@@ -62,6 +62,8 @@ nav button span{font-size:20px;transition:transform .2s}nav button.on{color:var(
 .tap{cursor:pointer;-webkit-tap-highlight-color:transparent}.tap:active{transform:scale(.98);opacity:.9}
 #pop{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center}#pop>div{background:var(--card);color:var(--tx,inherit);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:18px 18px 26px;animation:up .25s ease both}
 #testov .card,#testov .btn,.noanim .card{animation:none!important;transition:none!important}
+.av{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.25);color:#fff;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;background-size:cover;background-position:center;cursor:pointer;flex:none;border:2px solid rgba(255,255,255,.6)}.av.big{width:84px;height:84px;font-size:34px;margin:0 auto;background:var(--pr);cursor:default}
+*,*::before,*::after{animation:none!important;animation-duration:0s!important;transition:none!important;scroll-behavior:auto!important}
 </style>
 </head>
 <body>
@@ -80,7 +82,7 @@ nav button span{font-size:20px;transition:transform .2s}nav button.on{color:var(
 </div>
 
 <div id="app" class="hide">
-  <header><div class="hrow"><div><div class="hn" id="h-name">—</div><div class="hs" id="h-sub"></div></div><button class="out" onclick="doLogout()">Logout</button></div></header>
+  <header><div class="hrow"><div style="display:flex;align-items:center;gap:10px;min-width:0"><div id="h-av" class="av" onclick="show('settings')"></div><div style="min-width:0"><div class="hn" id="h-name">—</div><div class="hs" id="h-sub"></div></div></div><button class="out" onclick="doLogout()">Logout</button></div></header>
   <main id="main"></main>
   <nav id="nav"></nav>
 </div>
@@ -140,7 +142,8 @@ function init(){
   if(DEMO)$('l-demo').classList.remove('hide');
   if(DEMO){var s=localStorage.getItem('kt_demo_in');if(s){enter(demoData())}return}
   firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();
-  auth.onAuthStateChanged(function(u){if(u&&!ME)loadFor(u)});
+  try{var k=JSON.parse(localStorage.getItem('kt_cache')||'null');if(k&&localStorage.getItem('kt_in')==='1')enter(k,false,false)}catch(e){}
+  auth.onAuthStateChanged(function(u){if(u)loadFor(u);else if(ME)doLogout()});
 }
 async function doLogin(){
   var id=$('l-id').value.trim(),pin=$('l-pin').value.trim(),er=$('l-err');er.textContent='';
@@ -149,19 +152,22 @@ async function doLogin(){
   try{
     if(DEMO){if(id.toUpperCase()==='DEMO'&&pin==='123456'){localStorage.setItem('kt_demo_in','1');enter(demoData())}else er.textContent='Wrong ID or PIN';return}
     var ok=null;
-    for(var v=1;v<=4&&!ok;v++){try{ok=await auth.signInWithEmailAndPassword(san(id)+'-v'+v+EMAIL_DOMAIN,pin)}catch(e){if(e.code==='auth/network-request-failed'){er.textContent='No internet connection';return}}}
+    var vk='kt_ver_'+san(id),cv=+localStorage.getItem(vk)||1,vs=[cv].concat([1,2,3,4].filter(function(x){return x!==cv}));
+    for(var i=0;i<vs.length&&!ok;i++){try{ok=await auth.signInWithEmailAndPassword(san(id)+'-v'+vs[i]+EMAIL_DOMAIN,pin);if(ok)localStorage.setItem(vk,String(vs[i]))}catch(e){if(e.code==='auth/network-request-failed'){er.textContent='No internet connection';return}}}
     if(!ok){er.textContent='Wrong ID or PIN. Ask your tutor.';return}
+    localStorage.setItem('kt_in','1');
   }finally{$('l-btn').textContent='Login'}
 }
 async function loadFor(u){
   try{
     var did=(u.email||'').replace(/-v\d+@.*$/,'');
-    var d=await db.collection('students').doc(did).get();
-    if(!d.exists){$('l-err').textContent='Your data is not published yet. Ask your tutor.';await auth.signOut();return}
-    var c={notices:[],papers:[],tests:[]};
-    try{var n=await db.collection('center').doc('notices').get();if(n.exists)c.notices=n.data().items||[];var p=await db.collection('center').doc('papers').get();if(p.exists)c.papers=p.data().items||[];var ts=await db.collection('center').doc('tests').get();if(ts.exists)c.tests=ts.data().items||[]}catch(e){}
+    var g=function(n){return db.collection('center').doc(n).get().catch(function(){return {exists:false}})};
+    var r=await Promise.all([db.collection('students').doc(did).get(),g('notices'),g('papers'),g('tests')]),d=r[0];
+    if(!d.exists){$('l-err').textContent='Your data is not published yet. Ask your tutor.';localStorage.removeItem('kt_in');localStorage.removeItem('kt_cache');if(ME)doLogout();else await auth.signOut();return}
+    var c={notices:r[1].exists?r[1].data().items||[]:[],papers:r[2].exists?r[2].data().items||[]:[],tests:r[3].exists?r[3].data().items||[]:[]};
     try{localStorage.setItem('kt_cache',JSON.stringify({me:d.data(),cen:c}))}catch(e){}
-    enter({me:d.data(),cen:c},true);
+    if(ME){ME=d.data();CEN=c;if(!sessionStorage.getItem('kt_lg')){sessionStorage.setItem('kt_lg','1');logAct('login')}if(!$('testov')&&!$('pop'))show(tab);return}
+    sessionStorage.setItem('kt_lg','1');enter({me:d.data(),cen:c},true);
   }catch(e){
     try{var k=JSON.parse(localStorage.getItem('kt_cache')||'null');if(k){enter(k,false,true);return}}catch(e2){}
     $('l-err').textContent='Could not load. Check internet.';
@@ -173,16 +179,16 @@ function enter(data,fresh,offline){
   $('h-name').textContent=ME.name;$('h-sub').textContent='Class '+ME.grade+(ME.batch?' · '+ME.batch:'')+(offline?' · offline':'');
   var d=new Date();calY=d.getFullYear();calM=d.getMonth();
   if(fresh!==false&&!offline)logAct('login');
-  buildNav();show('home');
+  buildNav();show('home');setAv();syncDp();
   var tr=localStorage.getItem('kt_test');if(tr){try{var o2=JSON.parse(tr);var tt=myTests().filter(function(x){return x.id===o2.t.id})[0];if(tt&&o2.key.indexOf(san(ME.id))===0){TS=o2;TS.t=tt;openTest()}}catch(e){}}
   var t=localStorage.getItem('kt_timer');if(t){try{var o=JSON.parse(t);if(o.end>Date.now()||o.end)startTimer(o,true)}catch(e){}}
 }
-function doLogout(){ME=null;try{localStorage.removeItem('kt_demo_in')}catch(e){}if(auth)auth.signOut();$('app').classList.add('hide');$('login').classList.remove('hide');$('l-pin').value=''}
+function doLogout(){ME=null;try{localStorage.removeItem('kt_demo_in');localStorage.removeItem('kt_in');localStorage.removeItem('kt_cache');sessionStorage.removeItem('kt_lg')}catch(e){}if(auth)auth.signOut();$('app').classList.add('hide');$('login').classList.remove('hide');$('l-pin').value=''}
 
 /* ── tabs ── */
 var TABS=[['home','🏠','Home'],['att','📅','Attendance'],['fees','💰','Fees'],['marks','📝','Marks'],['tests','✅','Tests'],['papers','📄','Papers']];
 function buildNav(){$('nav').innerHTML=TABS.map(function(t){return '<button id="nv-'+t[0]+'" onclick="show(\''+t[0]+'\')"><span>'+t[1]+'</span>'+t[2]+'</button>'}).join('')}
-function show(t){tab=t;TABS.forEach(function(x){$('nv-'+x[0]).classList.toggle('on',x[0]===t)});$('main').innerHTML=({home:vHome,att:vAtt,fees:vFees,marks:vMarks,tests:vTests,papers:vPapers})[t]();window.scrollTo(0,0);setTimeout(anim,40)}
+function show(t){tab=t;TABS.forEach(function(x){$('nv-'+x[0]).classList.toggle('on',x[0]===t)});$('main').classList.remove('noanim');$('main').innerHTML=({settings:vSettings,home:vHome,att:vAtt,fees:vFees,marks:vMarks,tests:vTests,papers:vPapers})[t]();window.scrollTo(0,0);setTimeout(anim,40)}
 function anim(){document.querySelectorAll('.ring circle[data-l]').forEach(function(c){c.setAttribute('stroke-dasharray',c.dataset.l+' 999')});document.querySelectorAll('.bars i[data-h]').forEach(function(b){b.style.height=b.dataset.h+'%'})}
 function ring(p,col){var C=2*Math.PI*36;return '<div class="ring"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="36" stroke="var(--br)"/><circle cx="42" cy="42" r="36" stroke="'+col+'" stroke-dasharray="0 999" data-l="'+(Math.max(0,Math.min(100,p))/100*C)+'"/></svg><div>'+Math.round(p)+'%</div></div>'}
 function col(p){return p>=85?'var(--ok)':(p>=70?'var(--warn)':'var(--bad)')}
@@ -213,7 +219,7 @@ function calGo(n){$('main').classList.add('noanim');calM+=n;if(calM<0){calM=11;c
 function vFees(){
   var f=ME.fees||[],due=f.reduce(function(t,x){return t+(x.balance||0)},0);
   return '<div class="card"><div class="lab">Total pending</div><div class="big" style="color:'+(due?'var(--bad)':'var(--ok)')+'">₹'+due.toLocaleString('en-IN')+'</div></div><div class="card"><div class="ct">Fee history</div>'
-   +(f.length?f.map(function(x,i){return '<div class="row tap" onclick="feeInfo('+i+')"><div class="m"><div class="t">'+esc(x.month)+'</div><div class="d">Paid ₹'+(x.paid||0).toLocaleString('en-IN')+' of ₹'+(x.total||0).toLocaleString('en-IN')+'</div></div><span class="chip '+esc(x.status)+'">'+(x.status==='paid'?'Paid':x.status==='partial'?'Partial':x.status==='overdue'?'Overdue':'Pending')+'</span></div>'}).join(''):'<div class="empty">No fee records</div>')+'</div>';
+   +(f.length?f.map(function(x,i){return '<div class="row tap" onclick="feeInfo('+i+')"><div class="m"><div class="t">'+esc(x.month)+'</div><div class="d">Paid ₹'+(x.paid||0).toLocaleString('en-IN')+' of ₹'+(x.total||0).toLocaleString('en-IN')+'</div>'+((x.paidOn||x.rcpt)?'<div class="d">'+(x.paidOn?'📅 '+esc(x.paidOn):'')+(x.rcpt?' · 🧾 '+esc(x.rcpt):'')+'</div>':'')+'</div><span class="chip '+esc(x.status)+'">'+(x.status==='paid'?'Paid':x.status==='partial'?'Partial':x.status==='overdue'?'Overdue':'Pending')+'</span></div>'}).join(''):'<div class="empty">No fee records</div>')+'</div>';
 }
 function vMarks(){
   var m=(ME.marks||[]).slice().sort(function(a,b){return String(a.date).localeCompare(String(b.date))}),v=m.filter(function(x){return !x.absent&&x.max>0}),avg=v.length?v.reduce(function(t,x){return t+x.marks/x.max*100},0)/v.length:null;
@@ -253,10 +259,43 @@ function finishPaper(){
 }
 
 
+/* ── settings: photo + message to admin ── */
+function dpKey(){return 'kt_dp_'+san(ME.id)}
+function setAv(){var a=$('h-av');if(!a||!ME)return;var d=null;try{d=localStorage.getItem(dpKey())}catch(e){}
+  a.style.backgroundImage=d?'url('+d+')':'';a.textContent=d?'':(ME.name||'?').trim().charAt(0).toUpperCase()}
+async function syncDp(){if(DEMO||!db)return;try{var d=await db.collection('profiles').doc(san(ME.id)).get();if(d.exists&&d.data().photo){localStorage.setItem(dpKey(),d.data().photo);setAv()}}catch(e){}}
+function pickDp(inp){
+  var f=inp.files&&inp.files[0];if(!f)return;if(!/^image\//.test(f.type)){alert('Please choose a photo');return}
+  var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){
+    var c=document.createElement('canvas'),S=160,m=Math.min(im.width,im.height),cx=c.getContext('2d');c.width=c.height=S;cx.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,S,S);
+    var u=c.toDataURL('image/jpeg',.7);try{localStorage.setItem(dpKey(),u)}catch(e){}
+    if(!DEMO&&db)db.collection('profiles').doc(san(ME.id)).set({sid:san(ME.id),photo:u,ts:Date.now()}).catch(function(){});
+    setAv();show('settings')};im.src=r.result};r.readAsDataURL(f)}
+function vSettings(){
+  var d=null,hist=[];try{d=localStorage.getItem(dpKey());hist=JSON.parse(localStorage.getItem('kt_msgs_'+san(ME.id))||'[]')}catch(e){}
+  var fld='width:100%;padding:11px;border-radius:10px;border:1px solid var(--br);font-family:inherit;background:var(--card);color:inherit;box-sizing:border-box';
+  return '<div class="card" style="text-align:center"><div class="av big" style="'+(d?'background-image:url('+d+')':'')+'">'+(d?'':esc((ME.name||'?').trim().charAt(0).toUpperCase()))+'</div>'
+   +'<div class="t" style="margin-top:10px;font-size:16px">'+esc(ME.name)+'</div><div class="d">ID '+esc(ME.id)+' · Class '+esc(ME.grade)+'</div>'
+   +'<label class="btn s" style="display:inline-block;margin-top:12px;cursor:pointer">📷 Change photo<input type="file" accept="image/*" style="display:none" onchange="pickDp(this)"></label></div>'
+   +'<div class="card"><div class="ct">✉️ Message to admin</div><select id="mg-t" style="'+fld+';margin-bottom:8px"><option>Password / PIN change request</option><option>Fees question</option><option>Attendance correction</option><option>Other</option></select>'
+   +'<textarea id="mg-x" rows="3" maxlength="500" placeholder="Write your message…" style="'+fld+'"></textarea>'
+   +'<button class="btn" style="margin-top:8px" onclick="sendMsg()">Send to admin</button><div id="mg-st" class="d" style="margin-top:6px"></div>'
+   +(hist.length?'<div class="ct" style="margin-top:12px">Sent</div>'+hist.slice(0,5).map(function(m){return '<div class="row"><div class="m"><div class="t">'+esc(m.type)+'</div><div class="d">'+esc(m.text)+'</div></div><div class="d">'+new Date(m.ts).toLocaleDateString('en-IN')+'</div></div>'}).join(''):'')+'</div>'
+   +'<div class="card"><button class="btn" style="margin:0;background:#ef4444" onclick="doLogout()">Logout</button></div>';
+}
+async function sendMsg(){
+  var t=$('mg-t').value,x=$('mg-x').value.trim(),st=$('mg-st');if(!x){st.textContent='Please write a message';return}
+  var last=+localStorage.getItem('kt_msg_last')||0;if(Date.now()-last<30000){st.textContent='Please wait a few seconds';return}
+  var rec={sid:san(ME.id),name:ME.name,type:t,text:x,ts:Date.now()};
+  try{if(!DEMO)await db.collection('messages').add(rec);
+    localStorage.setItem('kt_msg_last',String(Date.now()));var k='kt_msgs_'+san(ME.id),a=JSON.parse(localStorage.getItem(k)||'[]');a.unshift(rec);localStorage.setItem(k,JSON.stringify(a.slice(0,20)));
+    show('settings');setTimeout(function(){$('mg-st').textContent='✓ Sent to admin'},50)}
+  catch(e){st.textContent='Could not send. Check internet.'}
+}
 /* ── tap details ── */
 function popup(t,h){var o=$('pop');if(o)o.remove();o=document.createElement('div');o.id='pop';o.onclick=function(e){if(e.target===o)o.remove()};o.innerHTML='<div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:15px">'+t+'</b><button class="btn s" onclick="$(\'pop\').remove()">✕</button></div>'+h+'</div>';document.body.appendChild(o)}
 function noticeInfo(i){var n=(window.__ns||[])[i];if(n)popup(esc(n.title),'<div style="white-space:pre-wrap;font-size:13px">'+esc(n.text||'')+'</div><div class="d" style="margin-top:8px">'+esc(n.date||'')+'</div>')}
-function feeInfo(i){var x=(ME.fees||[])[i];if(x)popup(esc(x.month),'<div class="row"><div class="m">Total fee</div><b>₹'+(x.total||0).toLocaleString('en-IN')+'</b></div><div class="row"><div class="m">Paid</div><b style="color:var(--ok)">₹'+(x.paid||0).toLocaleString('en-IN')+'</b></div><div class="row"><div class="m">Balance</div><b style="color:'+(x.balance?'var(--bad)':'var(--ok)')+'">₹'+(x.balance||0).toLocaleString('en-IN')+'</b></div><div class="row"><div class="m">Status</div><span class="chip '+esc(x.status)+'">'+esc(x.status)+'</span></div>')}
+function feeInfo(i){var x=(ME.fees||[])[i];if(x)popup(esc(x.month),'<div class="row"><div class="m">Total fee</div><b>₹'+(x.total||0).toLocaleString('en-IN')+'</b></div><div class="row"><div class="m">Paid</div><b style="color:var(--ok)">₹'+(x.paid||0).toLocaleString('en-IN')+'</b></div><div class="row"><div class="m">Balance</div><b style="color:'+(x.balance?'var(--bad)':'var(--ok)')+'">₹'+(x.balance||0).toLocaleString('en-IN')+'</b></div><div class="row"><div class="m">Status</div><span class="chip '+esc(x.status)+'">'+esc(x.status)+'</span></div>'+(x.paidOn?'<div class="row"><div class="m">Paid on</div><b>'+esc(x.paidOn)+'</b></div>':'')+(x.rcpt?'<div class="row"><div class="m">Receipt no.</div><b>'+esc(x.rcpt)+'</b></div>':'')+(x.mode?'<div class="row"><div class="m">Mode</div><b>'+esc(x.mode)+'</b></div>':''))}
 function markInfo(i){var x=(window.__mk||[])[i];if(!x)return;var p=x.max?Math.round(x.marks/x.max*100):0;popup(esc(x.exam),'<div class="row"><div class="m">Subject</div><b>'+esc(x.subject)+'</b></div><div class="row"><div class="m">Date</div><b>'+esc(x.date||'')+'</b></div><div class="row"><div class="m">Marks</div><b>'+(x.absent?'Absent':x.marks+' / '+x.max)+'</b></div>'+(x.absent?'':'<div class="row"><div class="m">Percentage</div><b style="color:'+col(p)+'">'+p+'%</b></div>'))}
 function dayInfo(k){var v=(ME.att||{})[k],t={P:'🟩 Present',A:'🟥 Absent',L:'🟨 Late',H:'🟦 Holiday'}[v]||'No record';popup(esc(k),'<div style="font-size:16px">'+t+'</div>')}
 /* ── MCQ tests ── */
