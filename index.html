@@ -162,12 +162,13 @@ async function loadFor(u){
   try{
     var did=(u.email||'').replace(/-v\d+@.*$/,'');
     var g=function(n){return db.collection('center').doc(n).get().catch(function(){return {exists:false}})};
-    var r=await Promise.all([db.collection('students').doc(did).get(),g('notices'),g('papers'),g('tests')]),d=r[0];
+    var r=await Promise.all([db.collection('students').doc(did).get(),g('notices'),g('papers'),g('tests'),db.collection('results').doc(did).get().catch(function(){return {exists:false}})]),d=r[0];
     if(!d.exists){$('l-err').textContent='Your data is not published yet. Ask your tutor.';localStorage.removeItem('kt_in');localStorage.removeItem('kt_cache');if(ME)doLogout();else await auth.signOut();return}
     var c={notices:r[1].exists?r[1].data().items||[]:[],papers:r[2].exists?r[2].data().items||[]:[],tests:r[3].exists?r[3].data().items||[]:[]};
-    try{localStorage.setItem('kt_cache',JSON.stringify({me:d.data(),cen:c}))}catch(e){}
-    if(ME){ME=d.data();CEN=c;if(!sessionStorage.getItem('kt_lg')){sessionStorage.setItem('kt_lg','1');logAct('login')}if(!$('testov')&&!$('pop'))show(tab);return}
-    sessionStorage.setItem('kt_lg','1');enter({me:d.data(),cen:c},true);
+    var me=d.data();me.results=r[4].exists?(r[4].data().items||[]):[];
+    try{localStorage.setItem('kt_cache',JSON.stringify({me:me,cen:c}))}catch(e){}
+    if(ME){ME=me;CEN=c;if(!sessionStorage.getItem('kt_lg')){sessionStorage.setItem('kt_lg','1');logAct('login')}if(!$('testov')&&!$('pop'))show(tab);return}
+    sessionStorage.setItem('kt_lg','1');enter({me:me,cen:c},true);
   }catch(e){
     try{var k=JSON.parse(localStorage.getItem('kt_cache')||'null');if(k){enter(k,false,true);return}}catch(e2){}
     $('l-err').textContent='Could not load. Check internet.';
