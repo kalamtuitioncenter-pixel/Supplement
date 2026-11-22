@@ -8,7 +8,12 @@
 <link rel="manifest" href="student-manifest.json">
 <style>
 :root{--pr:#185FA5;--pr2:#2f80d1;--bg:#eef4fb;--card:#fff;--tx:#0f172a;--tx2:#475569;--tx3:#94a3b8;--br:#dbe5f1;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
-@media(prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#131c2e;--tx:#e8eefb;--tx2:#a8b5cc;--tx3:#6b7a94;--br:#223049}}
+html.dark{--bg:#0b1220;--card:#131c2e;--tx:#e8eefb;--tx2:#a8b5cc;--tx3:#6b7a94;--br:#223049}
+html.glass body{background:linear-gradient(135deg,#c7d7fe,#a5d8ff 55%,#d0bfff) fixed}
+html.glass.dark body{background:linear-gradient(135deg,#1e1b4b,#0f2a4a 60%,#134e4a) fixed}
+html.glass{--card:rgba(255,255,255,.6);--br:rgba(255,255,255,.75)}
+html.glass.dark{--card:rgba(30,41,59,.6);--br:rgba(255,255,255,.14)}
+html.glass .card,html.glass .lbox,html.glass nav,html.glass header{-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:'Poppins','Noto Sans Tamil',system-ui,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;padding-bottom:78px}
 .hide{display:none!important}
@@ -82,7 +87,7 @@ nav button span{font-size:20px;transition:transform .2s}nav button.on{color:var(
 </div>
 
 <div id="app" class="hide">
-  <header><div class="hrow"><div style="display:flex;align-items:center;gap:10px;min-width:0"><div id="h-av" class="av" onclick="show('settings')"></div><div style="min-width:0"><div class="hn" id="h-name">—</div><div class="hs" id="h-sub"></div></div></div><button class="out" onclick="doLogout()">Logout</button></div></header>
+  <header><div class="hrow"><div style="display:flex;align-items:center;gap:10px;min-width:0"><div id="h-av" class="av" onclick="show('settings')"></div><div style="min-width:0"><div class="hn" id="h-name">—</div><div class="hs" id="h-sub"></div></div></div><button class="out" style="margin-right:6px" onclick="refreshData(true)">⟳</button><button class="out" onclick="doLogout()">Logout</button></div></header>
   <main id="main"></main>
   <nav id="nav"></nav>
 </div>
@@ -110,6 +115,10 @@ var FIREBASE_CONFIG = {
 var CENTER = { name:'Sri Kalam Tuition', city:'Chidambaram' };
 var EMAIL_DOMAIN = '@kalam-student.app';
 
+function _theme(){try{return JSON.parse(localStorage.getItem('kt_theme')||'{}')}catch(e){return {}}}
+function applyTheme(){var t=_theme(),d=t.mode==='dark'||((!t.mode||t.mode==='auto')&&window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches);var h=document.documentElement;h.classList.toggle('dark',!!d);h.classList.toggle('glass',!!t.glass)}
+function setTheme(k,v){var t=_theme();t[k]=v;try{localStorage.setItem('kt_theme',JSON.stringify(t))}catch(e){}applyTheme()}
+applyTheme();
 var $=function(i){return document.getElementById(i)};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
 var san=function(id){return String(id||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')};
@@ -282,6 +291,7 @@ function vSettings(){
    +'<textarea id="mg-x" rows="3" maxlength="500" placeholder="Write your message…" style="'+fld+'"></textarea>'
    +'<button class="btn" style="margin-top:8px" onclick="sendMsg()">Send to admin</button><div id="mg-st" class="d" style="margin-top:6px"></div>'
    +(hist.length?'<div class="ct" style="margin-top:12px">Sent</div>'+hist.slice(0,5).map(function(m){return '<div class="row"><div class="m"><div class="t">'+esc(m.type)+'</div><div class="d">'+esc(m.text)+'</div></div><div class="d">'+new Date(m.ts).toLocaleDateString('en-IN')+'</div></div>'}).join(''):'')+'</div>'
+   +'<div class="card"><div class="ct">🎨 Appearance</div><div style="display:flex;gap:8px;margin-bottom:8px">'+[['light','☀️ Light'],['dark','🌙 Night'],['auto','Auto']].map(function(m){var cur=_theme().mode||'auto';return '<button class="btn s" style="flex:1;margin:0;'+(cur===m[0]?'':'background:var(--br);color:var(--tx)')+'" onclick="setTheme(\'mode\',\''+m[0]+'\');show(\'settings\')">'+m[1]+'</button>'}).join('')+'</div><button class="btn s" style="width:100%;margin:0;'+(_theme().glass?'':'background:var(--br);color:var(--tx)')+'" onclick="setTheme(\'glass\',!_theme().glass);show(\'settings\')">✨ Glass theme: '+(_theme().glass?'On':'Off')+'</button></div>'
    +'<div class="card"><button class="btn" style="margin:0;background:#ef4444" onclick="doLogout()">Logout</button></div>';
 }
 async function sendMsg(){
@@ -293,6 +303,10 @@ async function sendMsg(){
     show('settings');setTimeout(function(){$('mg-st').textContent='✓ Sent to admin'},50)}
   catch(e){st.textContent='Could not send. Check internet.'}
 }
+/* ── refresh ── */
+function refreshData(manual){if(DEMO||!auth||!auth.currentUser){if(manual)alert('Refreshed');return}
+  loadFor(auth.currentUser).then(function(){if(manual){var h=$('h-sub');if(h){var o=h.textContent;h.textContent='Updated ✓';setTimeout(function(){h.textContent=o},1500)}}})}
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&ME)refreshData()});
 /* ── tap details ── */
 function popup(t,h){var o=$('pop');if(o)o.remove();o=document.createElement('div');o.id='pop';o.onclick=function(e){if(e.target===o)o.remove()};o.innerHTML='<div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:15px">'+t+'</b><button class="btn s" onclick="$(\'pop\').remove()">✕</button></div>'+h+'</div>';document.body.appendChild(o)}
 function noticeInfo(i){var n=(window.__ns||[])[i];if(n)popup(esc(n.title),'<div style="white-space:pre-wrap;font-size:13px">'+esc(n.text||'')+'</div><div class="d" style="margin-top:8px">'+esc(n.date||'')+'</div>')}
